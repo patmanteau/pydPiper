@@ -142,6 +142,9 @@ class music_controller(threading.Thread):
 		sv_t = threading.Thread(target=self.updatesystemvars)
 		sv_t.daemon = True
 		sv_t.start()
+		sv_t2 = threading.Thread(target=self.updatesystemtime)
+		sv_t2.daemon = True
+		sv_t2.start()
 		timesongstarted = 0
 
 
@@ -250,18 +253,18 @@ class music_controller(threading.Thread):
 			# Update display data every 1/4 second
 			time.sleep(.25)
 
-
-	def updatesystemvars(self):
+	def updatesystemtime(self):
 		while True:
 			try:
 				utc = moment.utcnow()
-				current_time_ampm = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%p").strip().decode()
+				local_t = utc.timezone(pydPiper_config.TIMEZONE)
+				current_time_ampm = local_t.strftime(u"%p").strip().decode()
 				if pydPiper_config.TIME24HOUR == True:
-					current_time = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%H:%M").strip().decode()
-					current_time_sec = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%H:%M:%S").strip().decode()
+					current_time = local_t.strftime(u"%H:%M").strip().decode()
+					current_time_sec = local_t.strftime(u"%H:%M:%S").strip().decode()
 				else:
-					current_time = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%-I:%M %p").strip().decode()
-					current_time_sec = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%-I:%M:%S %p").strip().decode()
+					current_time = local_t.strftime(u"%-I:%M %p").strip().decode()
+					current_time_sec = local_t.strftime(u"%-I:%M:%S %p").strip().decode()
 			except ValueError:
 				# Don't know why but on exit, the moment code is occasionally throwing a ValueError
 				current_time = u"00:00"
@@ -269,6 +272,25 @@ class music_controller(threading.Thread):
 				current_time_ampm = u''
 				utc = None
 
+			if pydPiper_config.TIMEBLINK and utc.seconds % 2 == 0:
+				current_time = current_time.replace(":", " ")
+				current_time_sec = current_time_sec.replace(":", " ")
+			
+			with self.musicdata_lock:
+				self.musicdata[u'utc'] = utc
+				self.musicdata[u'time'] = current_time
+				self.musicdata[u'time_ampm'] = current_time_ampm
+				# note: 'time_formatted' is computed during page processing as it needs the value of the strftime key contained on the line being displayed
+
+				# For backwards compatibility
+				self.musicdata[u'current_time'] = current_time
+				self.musicdata[u'current_time_sec'] = current_time
+
+			# Read system time every second
+			time.sleep(1)
+
+	def updatesystemvars(self):
+		while True:
 			current_ip = commands.getoutput(u"ip -4 route get 1 | head -1 | cut -d' ' -f8 | tr -d '\n'").strip()
 
 			outside_tempf = 0.0
@@ -282,7 +304,6 @@ class music_controller(threading.Thread):
 			outside_temp_min_formatted = u'0'
 
 #
-
 			try:
 				wq = 'http://api.wunderground.com/api/' + pydPiper_config.WUNDER_API + '/geolookup/conditions/forecast/q/' + pydPiper_config.WUNDER_LOCATION + '.json'
 				response = urllib2.urlopen(wq)
@@ -434,15 +455,6 @@ class music_controller(threading.Thread):
 				self.musicdata[u'disk_availp'] = availp
 				self.musicdata[u'disk_used'] = used
 				self.musicdata[u'disk_usedp'] = usedp
-
-				self.musicdata[u'utc'] = utc
-				self.musicdata[u'time'] = current_time
-				self.musicdata[u'time_ampm'] = current_time_ampm
-				# note: 'time_formatted' is computed during page processing as it needs the value of the strftime key contained on the line being displayed
-
-				# For backwards compatibility
-				self.musicdata[u'current_time'] = current_time
-				self.musicdata[u'current_time_sec'] = current_time
 
 				self.musicdata[u'ip'] = current_ip.decode()
 

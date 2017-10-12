@@ -39,6 +39,8 @@ LOGLEVEL=logging.INFO
 TIMEZONE=u"US/Eastern"
 TIME24HOUR=False
 #TIMEZONE=u"Europe/Paris"
+# Blink colons to mitigate OLED burn-in
+TIMEBLINK=False
 # Adjust this setting to localize temperature displays
 TEMPERATURE=u'fahrenheit'
 #TEMPERATURE=u'celsius'
