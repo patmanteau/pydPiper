@@ -27,9 +27,9 @@ WIDGETS = {
 	'artist': { 'type':'text', 'format':'{0}', 'variables':['artist'], 'font':'small','varwidth':True,'effect':('scroll','left',5,1,20,'onloop',3,100)},
 	'artistradio': { 'type':'text', 'format':'{0}', 'variables':['artist'], 'font':'small','varwidth':True},
 	'album': { 'type':'text', 'format':'{0}', 'variables':['album'], 'font':'small','varwidth':True,'effect':('scroll','left',5,1,20,'onloop',3,100)},
-	'time': { 'type':'text', 'format':'{0}', 'variables':['localtime|strftime+%-I:%M'], 'font':'large', 'just':'right', 'varwidth':True, 'size':(65,16) },
-	'timesmall': { 'type':'text', 'format':'{0}', 'variables':['localtime|strftime+%-I:%M'], 'font':'small', 'just':'right', 'varwidth':True, 'size':(40,8) },
-	'ampm': { 'type':'text', 'format':'{0}', 'variables':['localtime|strftime+%p'], 'font':'small', 'varwidth':True },
+	'time': { 'type':'text', 'format':'{0}', 'variables':['utc|timezone+US/Eastern|strftime+%-I:%M'], 'font':'large', 'just':'right', 'varwidth':True, 'size':(65,16) },
+	'timesmall': { 'type':'text', 'format':'{0}', 'variables':['utc|timezone+US/Eastern|strftime+%-I:%M'], 'font':'small', 'just':'right', 'varwidth':True, 'size':(40,8) },
+	'ampm': { 'type':'text', 'format':'{0}', 'variables':['utc|timezone+US/Eastern|strftime+%p'], 'font':'small', 'varwidth':True },
 	'temp': { 'type':'text', 'format':'{0}', 'variables':['outside_temp_formatted'], 'font':'small', 'just':'right', 'size':(25,8) },
 	'temphilow': { 'type':'text', 'format':'H {0}\nL {1}', 'variables':['outside_temp_max|int', 'outside_temp_min|int'], 'font':'small', 'just':'right', 'size':(25,16) },
 	'conditions': { 'type':'text', 'format':'{0}', 'variables':['outside_conditions|capitalize'], 'font':'small','varwidth':True, 'size':(55,16), 'effect':('scroll','left',5,1,20,'onloop',3,55)},
@@ -62,8 +62,7 @@ CANVASES = {
 	'showrepeatonce': { 'widgets': [ ('repeatoncesymbol',0,0), ('repeatonce', 15,0) ], 'size':(100,16) },
 	'showrepeatall': { 'widgets': [ ('repeatallsymbol',0,0), ('repeatall', 15,0) ], 'size':(100,16) },
 	'blank': { 'widgets': [], 'size':(80,16) },
-	'stoptime':        { 'widgets': [ ('time',10,8), ('ampm',75,8) ], 'size':(100,32) },
-	'stoptimeweather': { 'widgets': [ ('time',0,0), ('ampm',65,0), ('temphilow',75,0), ('conditions2',0,24), ('temp',75,24) ], 'size':(100,32) },
+	'stoptime': { 'widgets': [ ('time',0,0), ('ampm',65,0), ('temphilow',75,0), ('conditions2',0,24), ('temp',75,24) ], 'size':(100,32) },
 	'weather': { 'widgets': [ ('temp',0,0), ('conditions',0,8), ('temphilow', 55,0) ], 'size':(100,16) },
 	'volume_changed': { 'widgets': [ ('volume',5,0), ('volumebar',0,8) ], 'size':(100,16) },
 }
@@ -81,20 +80,20 @@ SEQUENCES = [
 	{
 		'name': 'seqPlay',
 		'canvases': [
-			{ 'name':'playartist', 'duration':8, 'conditional':"not db['actPlayer']=='webradio'" },
+			{ 'name':'playartist', 'duration':8, 'conditional':"not db['stream']=='webradio'" },
 			{ 'name':'playalbum', 'duration':8, 'conditional':"not db['stream']=='webradio'" },
 			{ 'name':'playtitle', 'duration':8, 'conditional':"not db['stream']=='webradio'" },
-			{ 'name':'play_radio', 'duration':9999, 'conditional':"db['stream']=='webradio'" },
+			{ 'name':'play_radio', 'duration':8, 'conditional':"db['stream']=='webradio'" },
 		],
 		'conditional': "db['state']=='play'"
 	},
 	{
 		'name': 'seqStop',
 		'canvases': [
-			{ 'name':'stoptime', 'duration':9999, 'conditional':"db['outside_conditions']=='No data'" },
-			{ 'name':'stoptimeweather', 'duration':9999, 'conditional':"not db['outside_conditions']=='No data'" }
+			{ 'name':'stoptime', 'duration':15 },
+#			{ 'name':'weather', 'duration':10, 'conditional':"not db['outside_conditions']=='No data'" }
 		],
-		'conditional': "db['state']=='stop' or db['state']=='pause'"
+		'conditional': "db['state']=='stop'"
 	},
 	{
 		'name':'seqVolume',

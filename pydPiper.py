@@ -11,10 +11,10 @@ import displays
 import sources
 import pydPiper_config
 
-try:
-	import pyowm
-except ImportError:
-	pass
+#try:
+#	import pyowm
+#except ImportError:
+#	pass
 
 
 exitapp = [ False ]
@@ -64,6 +64,7 @@ class music_controller(threading.Thread):
 		'disk_availp':0,
 		'current_time':u"",
 		'utc':moment.utcnow(),
+		'localtime':moment.utcnow().timezone(pydPiper_config.TIMEZONE),
 		'current_time_sec':u"",
 		'current_time_formatted':u"",
 		'current_ip':u"",
@@ -142,9 +143,6 @@ class music_controller(threading.Thread):
 		sv_t = threading.Thread(target=self.updatesystemvars)
 		sv_t.daemon = True
 		sv_t.start()
-		sv_t2 = threading.Thread(target=self.updatesystemtime)
-		sv_t2.daemon = True
-		sv_t2.start()
 		timesongstarted = 0
 
 
@@ -173,6 +171,28 @@ class music_controller(threading.Thread):
 			except Queue.Empty:
 				pass
 
+			# Get current time
+			try:
+				utc = moment.utcnow()
+				localtime = moment.utcnow().timezone(pydPiper_config.TIMEZONE)
+				current_time_ampm = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%p").strip().decode()
+				if pydPiper_config.TIME24HOUR == True:
+					current_time = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%H:%M").strip().decode()
+					current_time_sec = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%H:%M:%S").strip().decode()
+				else:
+					current_time = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%-I:%M %p").strip().decode()
+					current_time_sec = moment.utcnow().timezone(pydPiper_config.TIMEZONE).strftime(u"%-I:%M:%S %p").strip().decode()
+			except ValueError:
+				# Don't know why but on exit, the moment code is occasionally throwing a ValueError
+				current_time = u"00:00"
+				current_time_sec = u"00:00:00"
+				current_time_ampm = u''
+				utc = None
+				localtime = None
+
+			if pydPiper_config.TIMEBLINK and utc.seconds % 2 == 0:
+				current_time = current_time.replace(":", " ")
+				current_time_sec = current_time_sec.replace(":", " ")
 
 			with self.musicdata_lock:
 				# Update musicdata based upon received message
@@ -210,8 +230,19 @@ class music_controller(threading.Thread):
 				self.musicdata[u'single_onoff'] = u"On" if self.musicdata[u'single'] else u"Off"
 				self.musicdata[u'repeat_onoff'] = u"On" if self.musicdata[u'repeat'] else u"Off"
 
+				# update time variables
+				self.musicdata[u'utc'] = utc
+				self.musicdata[u'localtime'] = localtime
+				self.musicdata[u'time'] = current_time
+				self.musicdata[u'time_ampm'] = current_time_ampm
+				# note: 'time_formatted' is computed during page processing as it needs the value of the strftime key contained on the line being displayed
 
-			# If anything has changed, update pages
+				# For backwards compatibility
+				self.musicdata[u'current_time'] = current_time
+				self.musicdata[u'current_time_sec'] = current_time
+
+
+			# If anything has changed, update pages ### probably unnecessary to check this now that time is being updated in this section
 			if self.musicdata != self.musicdata_prev or lastupdate < time.time():
 
 				# Set lastupdate time to 1 second in the future
@@ -227,21 +258,37 @@ class music_controller(threading.Thread):
 
 				# Print the current contents of musicdata if showupdates is True
 				if self.showupdates:
-					ctime = moment.utcnow().timezone(u"US/Eastern").strftime("%-I:%M:%S %p").strip()
-					print u"Status at time {0}".format(ctime)
 
-					with self.musicdata_lock:
-						for item,value in self.musicdata.iteritems():
-							try:
-								print u"    [{0}]={1} {2}".format(item,repr(value), type(value))
-							except:
-								print u"err"
-								print u"[{0}] =".format(item)
-								print type(value)
-								print repr(value)
-						print u"\n"
+					# Check to see if a variable has changed (except time variables)
+					shouldshowupdate = False
+					for item, value in self.musicdata.iteritems():
+						try:
+							if item in ['utc', 'localtime', 'time', 'time_ampm', 'current_time', 'current_time_sec']:
+								continue
+							if self.musicdata_prev[item] != value:
+								shouldshowupdate = True
+								break
+						except KeyError:
+							shouldshowupdate = True
+							break
 
-				# Update musicdta_prev
+
+					if shouldshowupdate:
+						ctime = localtime.strftime("%-I:%M:%S %p").strip()
+						print u"Status at time {0}".format(ctime)
+
+						with self.musicdata_lock:
+							for item,value in self.musicdata.iteritems():
+								try:
+									print u"    [{0}]={1} {2}".format(item,repr(value), type(value))
+								except:
+									print u"err"
+									print u"[{0}] =".format(item)
+									print type(value)
+									print repr(value)
+							print u"\n"
+
+				# Update musicdata_prev
 				with self.musicdata_lock:
 					for item, value in self.musicdata.iteritems():
 						try:
@@ -252,42 +299,6 @@ class music_controller(threading.Thread):
 
 			# Update display data every 1/4 second
 			time.sleep(.25)
-
-	def updatesystemtime(self):
-		while True:
-			try:
-				utc = moment.utcnow()
-				local_t = utc.timezone(pydPiper_config.TIMEZONE)
-				current_time_ampm = local_t.strftime(u"%p").strip().decode()
-				if pydPiper_config.TIME24HOUR == True:
-					current_time = local_t.strftime(u"%H:%M").strip().decode()
-					current_time_sec = local_t.strftime(u"%H:%M:%S").strip().decode()
-				else:
-					current_time = local_t.strftime(u"%-I:%M %p").strip().decode()
-					current_time_sec = local_t.strftime(u"%-I:%M:%S %p").strip().decode()
-			except ValueError:
-				# Don't know why but on exit, the moment code is occasionally throwing a ValueError
-				current_time = u"00:00"
-				current_time_sec = u"00:00:00"
-				current_time_ampm = u''
-				utc = None
-
-			if pydPiper_config.TIMEBLINK and utc.seconds % 2 == 0:
-				current_time = current_time.replace(":", " ")
-				current_time_sec = current_time_sec.replace(":", " ")
-			
-			with self.musicdata_lock:
-				self.musicdata[u'utc'] = utc
-				self.musicdata[u'time'] = current_time
-				self.musicdata[u'time_ampm'] = current_time_ampm
-				# note: 'time_formatted' is computed during page processing as it needs the value of the strftime key contained on the line being displayed
-
-				# For backwards compatibility
-				self.musicdata[u'current_time'] = current_time
-				self.musicdata[u'current_time_sec'] = current_time
-
-			# Read system time every second
-			time.sleep(1)
 
 	def updatesystemvars(self):
 		while True:
@@ -456,6 +467,7 @@ class music_controller(threading.Thread):
 				self.musicdata[u'disk_used'] = used
 				self.musicdata[u'disk_usedp'] = usedp
 
+
 				self.musicdata[u'ip'] = current_ip.decode()
 
 				# For backwards compatibility
@@ -514,28 +526,69 @@ if __name__ == u'__main__':
 	loggingPIL.setLevel( logging.WARN )
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],u"d:",[u"driver=", u"lms",u"mpd",u"spop",u"rune",u"volumio",u"pages=", u"showupdates"])
+		opts, args = getopt.getopt(sys.argv[1:],u"d:",[u"driver=",u"devicetype=",u"width=",u"height=","rs=","e=","d4=","d5=","d6=","d7=","i2caddress=","i2cport=" ,u"wapi=", u"wlocale=", u"timezone=", u"temperature=", u"lms",u"mpd",u"spop",u"rune",u"volumio",u"pages=", u"lmsplayer=", u"showupdates"])
 	except getopt.GetoptError:
-		print u'pydPiper.py -d <driver> --mpd --spop --lms --rune --volumio --pages --showupdates'
+		print u'pydPiper.py -d <driver> --devicetype <devicetype (for LUMA devices)> --width <width in pixels> --height <height in pixels> --rs <rs> --e <e> --d4 <d4> --d5 <d5> --d6 <d6> --d7 <d7> --i2caddress <i2c address> --i2cport <i2c port> --wapi <weather underground api key> --wlocale <weather location> --timezone <timezone> --temperature <fahrenheit or celcius> --mpd --spop --lms --rune --volumio --pages <pagefile> --lmsplayer <mac address of lms player> --showupdates'
 		sys.exit(2)
 
 	services_list = [ ]
 	driver = ''
+	devicetype = ''
 	showupdates = False
 	pagefile = 'pages.py'
 
+	pin_rs = pydPiper_config.DISPLAY_PIN_RS
+	pin_e = pydPiper_config.DISPLAY_PIN_E
+	[pin_d4, pin_d5, pin_d6, pin_d7] = pydPiper_config.DISPLAY_PINS_DATA
+	rows = pydPiper_config.DISPLAY_HEIGHT
+	cols = pydPiper_config.DISPLAY_WIDTH
+	i2c_address = pydPiper_config.DISPLAY_I2C_ADDRESS
+	i2c_port = pydPiper_config.DISPLAY_I2C_PORT
+
 	for opt, arg in opts:
 		if opt == u'-h':
-			print u'pydPiper.py -d <driver> --mpd --spop --lms --rune --volumio --pages --showupdates'
+			print u'pydPiper.py -d <driver> --devicetype <devicetype e.g. ssd1306, sh1106> --width <width in pixels> --height <height in pixels> --rs <rs> --e <e> --d4 <d4> --d5 <d5> --d6 <d6> --d7 <d7> --i2caddress <i2c address> --i2cport <i2c port> --wapi <weather underground api key> --wlocale <weather location> --timezone <timezone> --temperature <fahrenheit or celcius> --mpd --spop --lms --rune --volumio --pages <pagefile> --lmsplayer <mac address of lms player> --showupdates'
 			sys.exit()
 		elif opt in (u"-d", u"--driver"):
 			driver = arg
+		elif opt in (u"--devicetype"):
+			devicetype = arg
+		elif opt in ("--rs"):
+			pin_rs  = int(arg)
+		elif opt in ("--e"):
+			pin_e  = int(arg)
+		elif opt in ("--d4"):
+			pin_d4  = int(arg)
+		elif opt in ("--d5"):
+			pin_d5  = int(arg)
+		elif opt in ("--d6"):
+			pin_d6  = int(arg)
+		elif opt in ("--d7"):
+			pin_d7  = int(arg)
+		elif opt in ("--i2caddress"):
+			i2c_address = int(arg,0)
+		elif opt in ("--i2cport"):
+			i2c_port = int(arg,0)
+		elif opt in ("--width"):
+			cols = int(arg,0)
+		elif opt in ("--height"):
+			rows = int(arg,0)
+		elif opt in (u"--wapi"):
+			pydPiper_config.WUNDER_API = arg
+		elif opt in (u"--wlocale"):
+			pydPiper_config.WUNDER_LOCATION = arg
+		elif opt in (u"--timezone"):
+			pydPiper_config.TIMEZONE = arg
+		elif opt in (u"--temperature"):
+			pydPiper_config.TEMPERATURE = arg
 		elif opt in (u"--mpd"):
 			services_list.append(u'mpd')
 		elif opt in (u"--spop"):
 			services_list.append(u'spop')
 		elif opt in (u"--lms"):
 			services_list.append(u'lms')
+		elif opt in (u"--lmsplayer"):
+			pydPiper_config.LMS_PLAYER = arg
 		elif opt in (u"--rune"):
 			services_list.append(u'rune')
 		elif opt in (u"--volumio"):
@@ -557,6 +610,9 @@ if __name__ == u'__main__':
 		elif opt in (u"--showupdates"):
 			showupdates = True
 
+	pydPiper_config.DISPLAY_SIZE = (cols, rows)
+
+	pins_data = [pin_d4, pin_d5, pin_d6, pin_d7]
 
 	if len(services_list) == 0:
 		logging.critical(u"Must have at least one music service to monitor")
@@ -566,18 +622,21 @@ if __name__ == u'__main__':
 
 	dq = Queue.Queue()
 
-	pin_rs = pydPiper_config.DISPLAY_PIN_RS
-	pin_e = pydPiper_config.DISPLAY_PIN_E
-	pins_data = pydPiper_config.DISPLAY_PINS_DATA
-	rows = pydPiper_config.DISPLAY_HEIGHT
-	cols = pydPiper_config.DISPLAY_WIDTH
-	i2c_address = pydPiper_config.DISPLAY_I2C_ADDRESS
-	i2c_port = pydPiper_config.DISPLAY_I2C_PORT
+
 
 	# Choose display
 
 	if not driver:
-		driver = pydPiper_config.DISPLAY_DRIVER
+		try:
+			driver = pydPiper_config.DISPLAY_DRIVER
+		except:
+			drvier = u''
+
+	if not devicetype:
+		try:
+			devicetype = pydPiper_config.DISPLAY_DEVICETYPE
+		except:
+			devicetype = u''
 
 
 	if driver == u"winstar_weg":
@@ -586,8 +645,12 @@ if __name__ == u'__main__':
 		lcd = displays.hd44780.hd44780(rows, cols, pin_rs, pin_e, pins_data)
 	elif driver == u"eaw204xlg_i2c":
 		lcd = displays.eaw204xlg_i2c.eaw204xlg_i2c(rows, cols, i2c_address, i2c_port)
+	elif driver == u"hd44780_i2c":
+		lcd = displays.hd44780_i2c.hd44780_i2c(rows, cols, i2c_address, i2c_port)
 	elif driver == u"ssd1306_i2c":
 		lcd = displays.ssd1306_i2c.ssd1306_i2c(rows, cols, i2c_address, i2c_port)
+	elif driver == u"luma_i2c":
+		lcd = displays.luma_i2c.luma_i2c(rows, cols, i2c_address, i2c_port, devicetype)
 	elif driver == u"curses":
 		lcd = displays.curses.curses(rows, cols)
 	else:

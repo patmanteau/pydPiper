@@ -19,7 +19,12 @@ import logging
 
 from luma.core.interface.serial import i2c
 from luma.core.render import canvas
+from luma.oled.device import sh1106
 from luma.oled.device import ssd1306
+from luma.oled.device import ssd1322
+from luma.oled.device import ssd1325
+from luma.oled.device import ssd1331
+from luma.core.error import DeviceNotFoundError
 
 
 try:
@@ -27,9 +32,9 @@ try:
 except:
 	logging.debug("RPi.GPIO not installed")
 
-class ssd1306_i2c():
+class luma_i2c():
 
-	def __init__(self, rows=64, cols=128, i2c_address=0x3d, i2c_port=1):
+	def __init__(self, rows=64, cols=128, i2c_address=0x3d, i2c_port=1, devicetype=u'ssd1306'):
 
 		self.i2c_address = i2c_address
 		self.i2c_port = i2c_port
@@ -44,8 +49,19 @@ class ssd1306_i2c():
 		self.fp = font.fontpkg
 
 		serial = i2c(port=i2c_port, address=i2c_address)
-		self.device = ssd1306(serial)
 
+		if devicetype.lower() == u'ssd1306':
+			self.device = ssd1306(serial)
+		elif devicetype.lower() == u'sh1106':
+			self.device = sh1106(serial)
+		elif devicetype.lower() == u'ssd1322':
+			self.device = ssd1322(serial)
+		elif devicetype.lower() == u'ssd1325':
+			self.device = ssd1325(serial)
+		elif devicetype.lower() == u'ssd1331':
+			self.device = ssd1331(serial)
+		else:
+			raise ValueError('{0} not a recognized luma device type'.format(devicetype))
 
 	def clear(self):
 		with canvas(self.device) as draw:
@@ -101,9 +117,9 @@ if __name__ == '__main__':
 	logging.basicConfig(format=u'%(asctime)s:%(levelname)s:%(message)s', handlers=[logging.StreamHandler()], level=logging.DEBUG)
 
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],"hr:c:",["row=","col=","i2c_address=","i2c_port="])
+		opts, args = getopt.getopt(sys.argv[1:],"hr:c:",["row=","col=","i2c_address=","i2c_port=","devicetype="])
 	except getopt.GetoptError:
-		print 'ssd1306_i2c.py -r <rows> -c <cols> --i2c_address <addr> --i2c_port <port>'
+		print 'luma_i2c.py -r <rows> -c <cols> --devicetype <devicetype> --i2c_address <addr> --i2c_port <port>'
 		sys.exit(2)
 
 	# Set defaults
@@ -111,15 +127,18 @@ if __name__ == '__main__':
 	cols = 128
 	i2c_address = 0x3d
 	i2c_port = 1
+	devicetype = u'ssd1306'
 
 	for opt, arg in opts:
 		if opt == '-h':
-			print 'ssd1306_i2c.py -r <rows> -c <cols> --i2c_address <addr> --i2c_port <port>'
+			print 'luma_i2c.py -r <rows> -c <cols> --devicetype <devicetype> --i2c_address <addr> --i2c_port <port>\nDevice types can be sh1106, ssd1306, ssd1322, ssd1325, and ssd1331'
 			sys.exit()
 		elif opt in ("-r", "--rows"):
 			rows = int(arg)
 		elif opt in ("-c", "--cols"):
 			cols = int(arg)
+		elif opt in ("--devicetype"):
+			devicetype  = arg
 		elif opt in ("--i2c_address"):
 			i2c_address  = int(arg)
 		elif opt in ("--i2c_port"):
@@ -187,13 +206,17 @@ if __name__ == '__main__':
 		(140, 'state', 'play' )
 	]
 
+	DISPLAY_OK = False
 	try:
-		print "SSD1306 OLED Display Test"
-		print "ROWS={0}, COLS={1}, I2C_ADDRESS={2}, I2C_PORT={3}".format(rows,cols,i2c_address,i2c_port)
+		print "LUMA OLED Display Test"
+		print "ROWS={0}, COLS={1}, DEVICETYPE={4}, I2C_ADDRESS={2}, I2C_PORT={3}".format(rows,cols,i2c_address,i2c_port,devicetype)
 
-		lcd = ssd1306_i2c(rows,cols,i2c_address,i2c_port)
+		lcd = luma_i2c(rows,cols,i2c_address,i2c_port,devicetype)
+
+		DISPLAY_OK = True
+
 		lcd.clear()
-		lcd.message("pydPiper\nStarting",0,0,True)
+		lcd.message("OLED Display\nStarting",0,0,True)
 		time.sleep(2)
 		lcd.clear()
 
@@ -221,9 +244,9 @@ if __name__ == '__main__':
 		pass
 
 	finally:
-		lcd.clear()
-		lcd.message("Goodbye!", 0, 0, True)
-		time.sleep(2)
-		lcd.clear()
-		GPIO.cleanup()
-		print "SSD1306 OLED Display Test Complete"
+		if DISPLAY_OK:
+			lcd.clear()
+			lcd.message("Goodbye!", 0, 0, True)
+			time.sleep(2)
+			lcd.clear()
+		print "Luma OLED Display Test Complete"
